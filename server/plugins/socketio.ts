@@ -15,7 +15,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
   const io = new Server({
     cors: {
-      origin: [ `http://localhost:${originPort}`],
+      origin: '*',
     },
   });
 

@@ -137,7 +137,7 @@ const emit = defineEmits<{
   (e: 'setPage', v: string): void
 }>();
 
-const socket = useSocketIO();
+let socket: import('socket.io-client').Socket | undefined;
 
 const mainBusy = ref(false);
 const loadingMessage = ref("Check Dependencies...");
@@ -197,7 +197,7 @@ function generateKey() {
   generateResult.value = undefined;
   lastestError.value = "";
 
-  socket.emit("generateKeys", nodeCount.value, withdrawAddress.value.trim(), keyPassword.value);
+  socket?.emit("generateKeys", nodeCount.value, withdrawAddress.value.trim(), keyPassword.value);
 }
 
 async function copyText(text: string) {
@@ -256,21 +256,25 @@ function toHome() {
   emit('setPage', 'home');
 }
 
-socket.on("generateKeysStatus", (msg: string) => {
-  loadingMessage.value = msg;
-})
 
-socket.on("generateKeysResponse", (resError: string | null, response: GenerateKeyResponse | undefined) => {
-  if (resError) {
-    // show error
-    console.error(resError);
-    lastestError.value = resError || "Can't generate validator keys";
-  } else {
-    generateFileURIs(response?.contents);
-    buildZipFile(response);
-    generateResult.value = response;
-  }
-  mainBusy.value = false;
-})
+onMounted(() => {
+  socket = useSocketIO(window.location);
 
+  socket.on("generateKeysStatus", (msg: string) => {
+    loadingMessage.value = msg;
+  })
+
+  socket.on("generateKeysResponse", (resError: string | null, response: GenerateKeyResponse | undefined) => {
+    if (resError) {
+      // show error
+      console.error(resError);
+      lastestError.value = resError || "Can't generate validator keys";
+    } else {
+      generateFileURIs(response?.contents);
+      buildZipFile(response);
+      generateResult.value = response;
+    }
+    mainBusy.value = false;
+  })
+});
 </script>

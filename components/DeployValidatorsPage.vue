@@ -194,7 +194,7 @@ import { XMarkIcon, MapPinIcon, ClipboardDocumentListIcon } from '@heroicons/vue
 import { isAddress } from "ethers";
 import validator from 'validator';
 
-const socket = useSocketIO();
+let socket: import('socket.io-client').Socket | undefined;
 
 const emit = defineEmits<{
   (e: 'setPage', v: string): void
@@ -340,7 +340,7 @@ function deployValidators() {
   lastestError.value = "";
   mainBusy.value = true;
 
-  socket.emit("deployValidators",
+  socket?.emit("deployValidators",
     JSON.stringify(files.value),
     machinePublicIp.value.trim(),
     feeRecipientAddress.value.trim(),
@@ -362,18 +362,23 @@ function toHome() {
   emit('setPage', 'home');
 }
 
-socket.on("deployValidatorsStatus", (log: string) => {
-  loadingMessage.value = log;
+onMounted(() => {
+  socket = useSocketIO(window.location);
+
+  socket.on("deployValidatorsStatus", (log: string) => {
+    loadingMessage.value = log;
+  })
+
+  socket.on("deployValidatorsResponse", (resError: string | null, response: DeployKeyResult | undefined) => {
+    if (resError) {
+      // show error
+      console.error(resError);
+      lastestError.value = resError || "Can't deploy validators";
+    } else {
+      deployResult.value = response;
+    }
+    mainBusy.value = false;
+  })
 })
 
-socket.on("deployValidatorsResponse", (resError: string | null, response: DeployKeyResult | undefined) => {
-  if (resError) {
-    // show error
-    console.error(resError);
-    lastestError.value = resError || "Can't deploy validators";
-  } else {
-    deployResult.value = response;
-  }
-  mainBusy.value = false;
-})
 </script>

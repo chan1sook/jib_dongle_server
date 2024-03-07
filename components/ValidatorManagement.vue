@@ -250,7 +250,7 @@ const emit = defineEmits<{
   (e: 'setPage', v: string): void
 }>();
 
-const socket = useSocketIO();
+let socket: import('socket.io-client').Socket | undefined;
 
 const mainBusy = ref(false);
 const apiBusy = ref(false);
@@ -331,7 +331,7 @@ function loadLighthouseApiData() {
   }
 
   mainBusy.value = true;
-  socket.emit("loadLighthouseApiData");
+  socket?.emit("loadLighthouseApiData");
 }
 
 function setupInterval() {
@@ -481,7 +481,7 @@ async function exitValidator(validator: ValidatorData) {
 
   waitChangeValidator.value.add(validator.voting_pubkey);
   exitVcBusy.value = true;
-  socket.emit("exitValidator", validator.voting_pubkey, keyPassword.value);
+  socket?.emit("exitValidator", validator.voting_pubkey, keyPassword.value);
 
   closeExitValidatorPopup();
 }
@@ -510,39 +510,40 @@ function toHome() {
 let refreshId: NodeJS.Timeout | undefined;
 let onlineRefreshId: NodeJS.Timeout | undefined;
 
-socket.on('loadLighthouseApiDataResponse', (response?: LighhouseApiData) => {
-  lighhouseApiData.value = response;
-
-  mainBusy.value = false;
-
-  getValidators();
-});
-
-socket.on("exitValidatorStatus", (log: string) => {
-  loadingMessage.value = log;
-});
-
-
-socket.on('exitValidatorResponse', (resError: string | null, pubkey: string, response: ExitValidatorResult | undefined) => {
-  exitVcResult.value = {
-    currentEpoch: response?.currentEpoch,
-    exitEpoch: response?.exitEpoch,
-    withdrawableEpoch: response?.withdrawableEpoch,
-    exitTs: response?.exitTs,
-    pubkey,
-  }
-
-  if (resError) {
-    // show error
-    console.error(resError);
-    exitVcError.value = resError || "Can't exit validators";
-  }
-
-  waitChangeValidator.value.delete(pubkey);
-  exitVcBusy.value = false;
-});
-
 onMounted(() => {
+  socket = useSocketIO(window.location);
+
+  socket.on('loadLighthouseApiDataResponse', (response?: LighhouseApiData) => {
+    lighhouseApiData.value = response;
+
+    mainBusy.value = false;
+
+    getValidators();
+  });
+
+  socket.on("exitValidatorStatus", (log: string) => {
+    loadingMessage.value = log;
+  });
+
+  socket.on('exitValidatorResponse', (resError: string | null, pubkey: string, response: ExitValidatorResult | undefined) => {
+    exitVcResult.value = {
+      currentEpoch: response?.currentEpoch,
+      exitEpoch: response?.exitEpoch,
+      withdrawableEpoch: response?.withdrawableEpoch,
+      exitTs: response?.exitTs,
+      pubkey,
+    }
+
+    if (resError) {
+      // show error
+      console.error(resError);
+      exitVcError.value = resError || "Can't exit validators";
+    }
+
+    waitChangeValidator.value.delete(pubkey);
+    exitVcBusy.value = false;
+  });
+
   setupInterval();
   _checkJibServer();
   loadLighthouseApiData();

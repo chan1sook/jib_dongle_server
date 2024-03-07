@@ -25,8 +25,6 @@ import DeployValidatorsPage from "~/components/DeployValidatorsPage.vue"
 import ValidatorManagement from "~/components/ValidatorManagement.vue"
 import SirenInfo from "~/components/SirenInfo.vue"
 
-const socket = useSocketIO();
-
 useHead({
   title: "JIB Validation Monitor",
 });
@@ -36,23 +34,28 @@ const showLogs = ref(false);
 const page = ref("home");
 const logsDom: Ref<HTMLDivElement | null> = ref(null);
 
+let socket: import('socket.io-client').Socket | undefined;
+
 function setPage(pageName: string) {
   page.value = pageName;
 }
 
-socket.on("terminalLogs", (chunk: string) => {
-  const str = terminalLogs.value + chunk;
-  const strLines = str.split("\n");
-  if (strLines.length > 200) {
-    strLines.splice(0, strLines.length - 200);
-  }
-
-  terminalLogs.value = strLines.join("\n");
-
-  nextTick(() => {
-    if (logsDom.value) {
-      logsDom.value.scrollTop = logsDom.value.scrollHeight;
+onMounted(() => {
+  socket = useSocketIO(window.location);
+  socket.on("terminalLogs", (chunk: string) => {
+    const str = terminalLogs.value + chunk;
+    const strLines = str.split("\n");
+    if (strLines.length > 200) {
+      strLines.splice(0, strLines.length - 200);
     }
+
+    terminalLogs.value = strLines.join("\n");
+
+    nextTick(() => {
+      if (logsDom.value) {
+        logsDom.value.scrollTop = logsDom.value.scrollHeight;
+      }
+    })
   })
 })
 </script>

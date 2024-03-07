@@ -2,15 +2,16 @@ import { Socket, io } from "socket.io-client";
 
 let socket: Socket | undefined;
 
-export const useSocketIO = () => {
+export const useSocketIO = (location : Location) => {
   if (socket) {
     return socket;
   }
+
   const {
     public: { sioPort },
   } = useRuntimeConfig();
-
-  socket = io(`http://localhost:${sioPort}`);
+  const baseHost = `${location.protocol}//${location.hostname}:${sioPort}`;
+  socket = io(baseHost);
 
   socket.on("getPathsResponse", (pathObj) => {
     console.log(pathObj);

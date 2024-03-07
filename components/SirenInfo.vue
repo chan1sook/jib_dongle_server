@@ -137,7 +137,7 @@ const emit = defineEmits<{
   (e: 'setPage', v: string): void
 }>();
 
-const socket = useSocketIO();
+let socket: import('socket.io-client').Socket | undefined;
 
 const mainBusy = ref(false);
 const loadingMessage = ref("Check Lighthouse Siren...");
@@ -177,7 +177,7 @@ function loadLighthouseSirenData() {
   }
 
   mainBusy.value = true;
-  socket.emit("loadSirenApiData");
+  socket?.emit("loadSirenApiData");
 }
 
 async function copyText(text: string) {
@@ -197,36 +197,37 @@ function deployJbcSiren() {
   mainBusy.value = true;
   lastestError.value = "";
   loadingMessage.value = "Install Lighthouse Siren";
-  socket.emit("deployJbcSiren");
+  socket?.emit("deployJbcSiren");
 }
 
 function toHome() {
   emit('setPage', 'home');
 }
-
-socket.on('loadSirenApiDataResponse', (response?: VcConfigData) => {
-  lighthouseSirenData.value = response;
-  deployResult.value = undefined;
-  mainBusy.value = false;
-});
-
-socket.on("deployJbcSirenStatus", (log: string) => {
-  loadingMessage.value = log;
-})
-
-socket.on("deployJbcSirenResponse", (resError: string | null, response: DeploySirenResult | undefined) => {
-  if (resError) {
-    // show error
-    console.error(resError);
-    lastestError.value = resError || "Can't deploy Siren";
-  } else {
-    deployResult.value = response;
-  }
-
-  mainBusy.value = false;
-})
-
 onMounted(() => {
+  socket = useSocketIO(window.location);
+
+  socket.on('loadSirenApiDataResponse', (response?: VcConfigData) => {
+    lighthouseSirenData.value = response;
+    deployResult.value = undefined;
+    mainBusy.value = false;
+  });
+
+  socket.on("deployJbcSirenStatus", (log: string) => {
+    loadingMessage.value = log;
+  })
+
+  socket.on("deployJbcSirenResponse", (resError: string | null, response: DeploySirenResult | undefined) => {
+    if (resError) {
+      // show error
+      console.error(resError);
+      lastestError.value = resError || "Can't deploy Siren";
+    } else {
+      deployResult.value = response;
+    }
+
+    mainBusy.value = false;
+  })
+
   loadLighthouseSirenData();
 })
 </script>
