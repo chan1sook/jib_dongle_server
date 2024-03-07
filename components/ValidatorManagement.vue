@@ -123,7 +123,7 @@
                         </td>
                         <td class="px-4 py-2 relative">
                           <div class="absolute inset-0 flex flex-row justify-center items-center">
-                            <img src="../assets/exit-svgrepo-com.svg" class="w-4 h-4 cursor-pointer" draggable="false"
+                            <img src="~/assets/exit-svgrepo-com.svg" class="w-4 h-4 cursor-pointer" draggable="false"
                               title="Exit Validator" @click="popupExitValidator(validator)" />
                           </div>
                         </td>
