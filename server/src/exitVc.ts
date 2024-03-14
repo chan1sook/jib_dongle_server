@@ -1,10 +1,10 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { getCustomLogger } from "../logger";
-import { getLighhouseDownloadUrl, getLocalLighthousePath, getPaths } from "../constant";
-import { checkGitVersion } from "../check-software";
+import { getChainConfigDir, getChainConfigGitSha256Checksum, getChainConfigGitUrl, getChainConfigPath, getLighhouseDownloadUrl, getLighhouseSha256Checksum, getLocalLighthousePath, getPaths, isOverrideCheckFiles } from "../constant";
+import { checkGitVersion, checkTarVersion } from "../check-software";
 import { basicExec, spawnProcess, sudoExec } from "../exec";
-import { isFileExists } from "../fs";
+import { calculateHash, isFileExists, isFileValid } from "../fs";
 
 export default function exitVcAction(socket: import("socket.io").Socket) {
   return async (pubkey: string, keyPassword: string) => {
@@ -26,35 +26,42 @@ async function exitValidator(socket: import("socket.io").Socket, pubKey: string,
     exitVcLogger.emitWithLog("Check Softwares");
 
     // check softwares
-    const [gitVersion] = await Promise.all([
+    const [gitVersion, tarVerstion] = await Promise.all([
       checkGitVersion(),
+      checkTarVersion(),
     ])
 
     exitVcLogger.logDebug("Git", gitVersion);
+    exitVcLogger.logDebug("tar", tarVerstion);
+    
+
+    const softwareNeeds = [];
 
     if (!gitVersion) {
-      let cmd = "";
-      if (!gitVersion) {
-        cmd += `apt-get update
-        apt-get install git -y
-        `;
-      }
+      softwareNeeds.push("git");
+    }
 
+    if (!tarVerstion) {
+      softwareNeeds.push("tar");
+    }
+
+    if(softwareNeeds.length > 0) {
       exitVcLogger.emitWithLog("Install Softwares");
 
-      exitVcLogger.injectExecTerminalLogs(
-        await sudoExec(cmd)
-      );
+      await sudoExec(`apt-get update
+        apt-get install ${softwareNeeds.join(' ')} -y
+      `, exitVcLogger.injectExecTerminalLogs)
 
       exitVcLogger.logDebug("Softwares Installed");
     }
-
+    
     exitVcLogger.logInfo("VC_DEPLOY_TEMP", filePaths.VC_DEPLOY_TEMP);
 
     // Get jibchain data
-    const chainConfigPath = path.join(filePaths.VC_DEPLOY_TEMP, "config");
-    const hasChainConfigExits = await isFileExists(chainConfigPath);
-    if(!hasChainConfigExits) {
+    const chainConfigPath = getChainConfigPath();
+    const isChainConfigFileValid = !isOverrideCheckFiles() && await isFileValid(chainConfigPath, getChainConfigGitSha256Checksum());
+
+    if(!isChainConfigFileValid) {
       try {
         await fs.rm(filePaths.VC_DEPLOY_TEMP, {
           recursive: true,
@@ -72,10 +79,12 @@ async function exitValidator(socket: import("socket.io").Socket, pubKey: string,
       exitVcLogger.injectExecTerminalLogs(
         await basicExec("git", [
           "clone",
-          "https://github.com/jibchain-net/node.git",
+          getChainConfigGitUrl(),
           filePaths.VC_DEPLOY_TEMP,
         ]),
       );
+
+      exitVcLogger.logDebug("sha256", await calculateHash(chainConfigPath));
     } else {
       exitVcLogger.logDebug("Use Cached Script");
     }
@@ -103,11 +112,10 @@ async function exitValidator(socket: import("socket.io").Socket, pubKey: string,
     const vcKeyPath = path.join(vcKeyFolderPath, vcKeyFileNames[0]);
     exitVcLogger.logInfo("vcKeyPath", vcKeyPath);
 
-
-    
-
-    const hasLighthouseExists = await isFileExists(getLocalLighthousePath());
-    if(!hasLighthouseExists) {
+    const lhFilePath = getLocalLighthousePath();
+    const isLhFileValid = !isOverrideCheckFiles() && await isFileValid(lhFilePath, getLighhouseSha256Checksum());
+  
+    if(!isLhFileValid) {
       try {
         await fs.rm(filePaths.LIGHTHOUSE_EXEC_PATH, {
           recursive: true,
@@ -145,6 +153,8 @@ async function exitValidator(socket: import("socket.io").Socket, pubKey: string,
       );
 
       exitVcLogger.logDebug("Lighthouse Downloaded");
+
+      exitVcLogger.logDebug("sha256", await calculateHash(lhFilePath));
     } else {
       exitVcLogger.logDebug("Use Cached File");
     }
@@ -155,14 +165,14 @@ async function exitValidator(socket: import("socket.io").Socket, pubKey: string,
     // ./lighthouse account validator exit
 
     const exitVcPromise = new Promise((resolve, reject) => {
-    const exitVcProcess = spawnProcess("./lighthouse", [
+    const exitVcProcess = spawnProcess(lhFilePath, [
         "account",
         "validator",
         "exit",
         "--keystore",
         vcKeyPath,
         "--testnet-dir",
-        chainConfigPath,
+        getChainConfigDir(),
         "--beacon-node",
         "https://metrabyte-cl.jibchain.net/",
         "--stdin-inputs"

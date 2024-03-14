@@ -1,5 +1,7 @@
 declare module 'validator';
 
+type DownloadFileInfoMap =  Record<string, {url:string,sha256:string,location:string}> 
+
 interface GenerateKeyResponse {
   mnemonic: string
   exportPath: string

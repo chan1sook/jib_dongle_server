@@ -1,6 +1,6 @@
-import { checkCurlVersion, checkGitVersion } from "../check-software";
-import { getPaths, getJbcDepositKeygenUrl, getLocalJbcDepositKeygenPath } from "../constant";
-import { basicExec, spawnProcess, sudoExec } from "../exec";
+import { checkCurlVersion, checkDockerVersion, checkGitVersion } from "../check-software";
+import { getPaths, isOverrideCheckFiles, jbcKeygenDockerfilePath, jbcKeygenGitUrl } from "../constant";
+import { basicExec, spawnProcess, sudoExec, sudoSpawn } from "../exec";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { isFileExists } from "../fs";
@@ -27,89 +27,144 @@ async function generateKeys(socket: import("socket.io").Socket, qty: number, wit
     generateKeyLogger.emitWithLog("Check Softwares");
 
     // check softwares
-    const [gitVersion, curlVersion] = await Promise.all([
+    const [dockerVersion, gitVersion, curlVersion] = await Promise.all([
+      checkDockerVersion(),
       checkGitVersion(),
       checkCurlVersion(),
     ]);
+
+    generateKeyLogger.logDebug("Docker", dockerVersion);
     generateKeyLogger.logDebug("Git", gitVersion);
     generateKeyLogger.logDebug("cURL", curlVersion);
 
-    const sofewareNeeds: string[] = [];
-    if (!gitVersion) {
-      sofewareNeeds.push("git");
-    }
+    if (!dockerVersion || !gitVersion || !curlVersion) {
+      let cmd = "";
 
-    if (!curlVersion) {
-      sofewareNeeds.push("curl");
-    }
+      if (!dockerVersion) {
+        cmd += // Add Docker's official GPG key:
+          `apt-get update
+        apt-get install ca-certificates curl gnupg -y
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+        ` +
+          // Add the repository to Apt sources:
+          `echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+        apt-get update
+        apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+        `;
+      }
 
-    if (sofewareNeeds.length > 0) {
+      const sofewareNeeds: string[] = [];
+      if (!gitVersion) {
+        sofewareNeeds.push("git");
+      }
+
+      if (!curlVersion) {
+        sofewareNeeds.push("curl");
+      }
+
+      if (sofewareNeeds.length > 0) {
+        cmd += `apt-get update
+        apt-get install ${sofewareNeeds.join(' ')} -y
+        `
+      }
+
       generateKeyLogger.emitWithLog("Install Softwares");
 
-      generateKeyLogger.injectExecTerminalLogs(
-        await sudoExec(
-        `apt-get update
-        apt-get install ${sofewareNeeds.join(' ')} -y
-        `)
-      );
+      await sudoExec(cmd, generateKeyLogger.injectExecTerminalLogs);
 
       generateKeyLogger.logDebug("Softwares Installed");
     }
 
-    generateKeyLogger.logInfo("JBC_KEYGEN_EXEC_PATH", filePaths.JBC_KEYGEN_EXEC_PATH);
+    generateKeyLogger.logInfo("JBC_KEYGEN_SCRIPT_PATH", filePaths.JBC_KEYGEN_SCRIPT_PATH);
 
-    const runtimePath = getLocalJbcDepositKeygenPath();
-    const hasRuntimeExits = await isFileExists(runtimePath);
+    // Get keygen script data (and script)
+    const keygenDockerfilePath = jbcKeygenDockerfilePath();
+    const isKeygenDockerfileExists = !isOverrideCheckFiles() && await isFileExists(keygenDockerfilePath);
 
-    if(!hasRuntimeExits) {
+    if(!isKeygenDockerfileExists) {
+      try {
+        await fs.rm(filePaths.JBC_KEYGEN_SCRIPT_PATH, { recursive: true, force: true, });
+      } catch (err) {
+  
+      }
+      await fs.mkdir(filePaths.JBC_KEYGEN_SCRIPT_PATH, { recursive: true });
+
       // download git
-      generateKeyLogger.emitWithLog("Download JBC Deposit File");
-      
-      await fs.mkdir(filePaths.JBC_KEYGEN_EXEC_PATH, { recursive: true });
+      generateKeyLogger.emitWithLog("Clone Jbc Depossit Script Git");
+    
       generateKeyLogger.injectExecTerminalLogs(
-        await basicExec("curl", [
-          "-L",
-          getJbcDepositKeygenUrl(),
-          "-o",
-          "deposit",
-        ], {
-          cwd: filePaths.JBC_KEYGEN_EXEC_PATH,
-        }),
-      );
-
-      // set it excutable
-      generateKeyLogger.injectExecTerminalLogs(
-        await basicExec("chmod", [
-          "+x",
-          runtimePath,
+        await basicExec("git", [
+          "clone",
+          jbcKeygenGitUrl(),
+          filePaths.JBC_KEYGEN_SCRIPT_PATH,
         ]),
-      )
-
-      generateKeyLogger.logDebug("File Downloaded");
+      );
     } else {
-      generateKeyLogger.logDebug("Use Cached File");
+      generateKeyLogger.logDebug("Use Cached Script");
     }
+    
+    // Clear old generated file
+    const keysPath = path.join(filePaths.JBC_KEYGEN_SCRIPT_PATH, "validator_keys");
+    try {
+      await sudoExec(`rm -rf ${keysPath}`, generateKeyLogger.injectExecTerminalLogs);
+    } catch(err) {
+      console.error(err);
+    }
+    await fs.mkdir(keysPath, { recursive: true });
     
     generateKeyLogger.emitWithLog("Generate Keys");
 
-    // Clear old generated file
-    const keysPath = path.join(filePaths.JBC_KEYGEN_EXEC_PATH, ".keys");
-    try {
-      await fs.rm(keysPath, {
-        recursive: true,
-        force: true,
-      });
-    } catch(err) {
+    // create compose
+    generateKeyLogger.emitWithLog("Build Dockerfile");
 
-    }
-    await fs.mkdir(keysPath, { recursive: true });
-  
-    const genKey = new Promise<GenerateKeyResponse>((resolve, reject) => {
+    const buildDocker = new Promise<void>(async (resolve, reject) => {
+      const buildProcess = await sudoSpawn("docker", [
+        "build", "--pull", "-t", "jbc-keygen", filePaths.JBC_KEYGEN_SCRIPT_PATH,
+      ]);
+
+      let out = "";
+      buildProcess.stdout.on("data", (data) => {
+        generateKeyLogger.injectTerminalLog(data.toString());
+        out += data.toString();
+      });
+
+      buildProcess.stderr.on("data", (data) => {
+        out += data.toString();
+        generateKeyLogger.injectTerminalLog(data.toString());
+      })
+
+      buildProcess.on("exit", async (code, signal) => {
+        console.log(out);
+        if (code === 0) {
+          resolve();
+        } else {
+          const tokens = out.split('\n').filter((str) => !!str);
+          const err = new Error(tokens[tokens.length - 1] || `Exit code:${code}`);
+          reject(err);
+        }
+      });
+    });
+
+    await buildDocker;
+    
+    generateKeyLogger.emitWithLog("Generate Keys");
+    
+    const genKey = new Promise<GenerateKeyResponse>(async (resolve, reject) => {
       let checkfileWorker : NodeJS.Timeout | undefined;
       let cachedProcess = "";
-      const exportPath = path.join(filePaths.JBC_KEYGEN_EXEC_PATH, ".keys/validator_keys");
-      
-      const genKeyProcess = spawnProcess("./deposit", [
+
+      const genKeyProcess = await sudoSpawn("docker", [
+        "run",
+        "-v",
+        `${keysPath}:/app/validator_keys`,
+        "-i",
+        "--rm",
+        "jbc-keygen",
         "--non_interactive",
         "new-mnemonic",
         `--num_validators=${qty}`,
@@ -117,11 +172,9 @@ async function generateKeys(socket: import("socket.io").Socket, qty: number, wit
         "--chain=jib",
         `--eth1_withdrawal_address=${withdrawAddress}`,
         `--keystore_password=${keyPassword}`,
-        `--folder=${keysPath}`,
       ], {
-        cwd: filePaths.JBC_KEYGEN_EXEC_PATH,
         timeout: 60 * 60 * 1000,
-      })
+      });
 
       let step = 1;
       let out = "";
@@ -130,8 +183,6 @@ async function generateKeys(socket: import("socket.io").Socket, qty: number, wit
       genKeyProcess.stdout.on("data", (data) => {
         generateKeyLogger.injectTerminalLog(data.toString());
         out += data.toString();
-
-        // generateKeyLogger.logInfo(`Step : ${step}`, out);
 
         if (step === 1 && out.includes("Please choose your language ['1. العربية', '2. ελληνικά', '3. English', '4. Français', '5. Bahasa melayu', '6. Italiano', '7. 日本語', '8. 한국어', '9. Português do Brasil', '10. român', '11. Türkçe', '12. 简体中文']:  [English]:")) {
           out = "";
@@ -164,7 +215,7 @@ async function generateKeys(socket: import("socket.io").Socket, qty: number, wit
 
           checkfileWorker = setInterval(async () => {
             try {
-              const files = await fs.readdir(exportPath);
+              const files = await fs.readdir(keysPath);
               const percents = files.length * 100 / (qty + 2);
               const processText = `Generate Keys: ${files.length}/${qty + 2} (${percents.toFixed(2)}%)`;
               if(cachedProcess !== processText) {
@@ -185,21 +236,26 @@ async function generateKeys(socket: import("socket.io").Socket, qty: number, wit
 
       genKeyProcess.on("exit", async (code, signal) => {
         clearInterval(checkfileWorker);
-  
-        if (code === 0) {
-          generateKeyLogger.logDebug("Read Keys");
-          
-          // read content
-          const files = await fs.readdir(exportPath);
-          const contents: Record<string, string> = {};
-          for (const file of files) {
-            const str = (await fs.readFile(path.join(exportPath, file))).toString();
-            contents[file] = str;
+        
+        try {
+          if (code === 0) {
+            generateKeyLogger.logDebug("Read Keys");
+            await sudoExec(`chmod +r -R ${keysPath}`, generateKeyLogger.injectExecTerminalLogs);
+
+            // read content
+            const files = await fs.readdir(keysPath);
+            const contents : Record<string, string> = {};
+            for (const file of files) {
+              const str = (await fs.readFile(path.join(keysPath, file))).toString();
+              contents[file] = str;
+            }
+            resolve({ mnemonic, contents, exportPath: keysPath });
+          } else {
+            const tokens = out.split('\n').filter((str) => !!str);
+            const err = new Error(tokens[tokens.length - 1] || `Exit code:${code}`);
+            reject(err);
           }
-          resolve({ mnemonic, contents, exportPath });
-        } else {
-          const tokens = out.split('\n').filter((str) => !!str);
-          const err = new Error(tokens[tokens.length - 1] || `Exit code:${code}`);
+        } catch(err) {
           reject(err);
         }
       })

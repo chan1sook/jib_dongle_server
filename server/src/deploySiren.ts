@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 
-import { getJbcSirenDownloadUrl, getLocalJbcSirenDockerImagePath, jbcSirenDockerComposeGroup, jbcSirenDockerComposePath } from "../constant";
+import { getJbcSirenDownloadUrl, getJbcSirenSha256Checksum, getLocalJbcSirenDockerImagePath, isOverrideCheckFiles, jbcSirenDockerComposeGroup, jbcSirenDockerComposePath } from "../constant";
 import { getPaths } from "../constant";
-import { isFileExists, readProgramConfig, writeProgramConfig } from "../fs";
+import { calculateHash, isFileExists, isFileValid, readProgramConfig, writeProgramConfig } from "../fs";
 import { getCustomLogger } from "../logger";
 import { checkDockerVersion, checkGitVersion } from "../check-software";
 import { basicExec, sudoExec } from "../exec";
@@ -67,16 +67,17 @@ async function deployJbcSiren(socket: import("socket.io").Socket, sirenPort: str
 
       deployJbcSirenLogger.emitWithLog("Install Softwares");
 
-      deployJbcSirenLogger.injectExecTerminalLogs(
-        await sudoExec(cmd)
-      );
+      await sudoExec(cmd, deployJbcSirenLogger.injectExecTerminalLogs);
 
       deployJbcSirenLogger.logDebug("Softwares Installed");
     };
 
 
-    const hasImageExists = await isFileExists(getLocalJbcSirenDockerImagePath());
-    if(!hasImageExists) {
+    const sirenImagePath = getLocalJbcSirenDockerImagePath();
+    const isSirenImageValid = !isOverrideCheckFiles() && 
+      await isFileValid(sirenImagePath, getJbcSirenSha256Checksum());
+
+    if(!isSirenImageValid) {
       try {
         await fs.rm(filePaths.JBC_SIREN_TEMP, {
           recursive: true,
@@ -103,6 +104,8 @@ async function deployJbcSiren(socket: import("socket.io").Socket, sirenPort: str
       );
 
       deployJbcSirenLogger.logDebug("Image Downloaded");
+
+      deployJbcSirenLogger.logDebug("sha256", await calculateHash(sirenImagePath));
     } else {
       deployJbcSirenLogger.logDebug("Use Cached File");
     }
@@ -139,9 +142,7 @@ async function deployJbcSiren(socket: import("socket.io").Socket, sirenPort: str
     docker compose -p "${dockerComposeProjectGroup}" -f "${composePath}" up -d
     `;
 
-    deployJbcSirenLogger.injectExecTerminalLogs(
-      await sudoExec(installDockerScript)
-    );
+    await sudoExec(installDockerScript, deployJbcSirenLogger.injectExecTerminalLogs);
 
     const deployResult = {
       sirenPort: _sirenPort,
