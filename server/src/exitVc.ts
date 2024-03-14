@@ -4,7 +4,7 @@ import { getCustomLogger } from "../logger";
 import { getChainConfigDir, getChainConfigGitSha256Checksum, getChainConfigGitUrl, getChainConfigPath, getLighhouseDownloadUrl, getLighhouseSha256Checksum, getLocalLighthousePath, getPaths, isOverrideCheckFiles } from "../constant";
 import { checkGitVersion, checkTarVersion } from "../check-software";
 import { basicExec, spawnProcess, sudoExec } from "../exec";
-import { calculateHash, isFileExists, isFileValid } from "../fs";
+import { calculateHash, isFileValid } from "../fs";
 
 export default function exitVcAction(socket: import("socket.io").Socket) {
   return async (pubkey: string, keyPassword: string) => {
