@@ -2,10 +2,10 @@ import fs from "node:fs/promises";
 
 import { getJbcSirenDownloadUrl, getJbcSirenSha256Checksum, getLocalJbcSirenDockerImagePath, isOverrideCheckFiles, jbcSirenDockerComposeGroup, jbcSirenDockerComposePath } from "../constant";
 import { getPaths } from "../constant";
-import { calculateHash, isFileExists, isFileValid, readProgramConfig, writeProgramConfig } from "../fs";
+import { calculateHash, isFileValid, readProgramConfig, writeProgramConfig } from "../fs";
 import { getCustomLogger } from "../logger";
 import { checkDockerVersion, checkGitVersion, getDockerInstallCmd } from "../check-software";
-import { basicExec, sudoExec } from "../exec";
+import { spawnProcess, sudoExec } from "../exec";
 
 
 export default function deploySirenAction(socket: import("socket.io").Socket) {
@@ -78,16 +78,45 @@ async function deployJbcSiren(socket: import("socket.io").Socket, sirenPort: str
       deployJbcSirenLogger.emitWithLog("Download Image");
 
       // Create files
-      deployJbcSirenLogger.injectExecTerminalLogs(
-        await basicExec("curl", [
+      const downloadPromise = new Promise<void>((resolve, reject) => {
+        const downloadProcess = spawnProcess("curl", [
           "-L",
           getJbcSirenDownloadUrl(),
           "-o",
-          "jbc-siren.tar",
+          sirenImagePath,
         ], {
-          cwd: filePaths.JBC_SIREN_TEMP,
-        }),
-      );
+          timeout: 60 * 60 * 1000,
+        })
+  
+        let out = "";
+  
+        downloadProcess.stdin.on("data", (data) => {
+          deployJbcSirenLogger.injectTerminalLog(data.toString());
+          out += data.toString();
+        })
+
+        downloadProcess.stderr.on("data", (data) => {
+          deployJbcSirenLogger.injectTerminalLog(data.toString());
+          out += data.toString();
+        })
+  
+        downloadProcess.on("exit", async (code, signal) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            const tokens = out.split('\n').filter((str) => !!str);
+            const err = new Error(tokens[tokens.length - 1] || `Exit code:${code}`);
+            reject(err);
+          }
+        })
+  
+        downloadProcess.on("error", (err) => {
+          console.error(err);
+          reject(err);
+        })
+      });
+      
+      await downloadPromise;
 
       deployJbcSirenLogger.logDebug("Image Downloaded");
 
@@ -124,7 +153,7 @@ async function deployJbcSiren(socket: import("socket.io").Socket, sirenPort: str
     const installDockerScript = `docker compose -p "${dockerComposeProjectGroup}" -f "${composePath}" down
     docker container rm -f jbc-siren
     docker image rm -f jbc-siren
-    docker load -i "${getLocalJbcSirenDockerImagePath()}"
+    docker load -i "${sirenImagePath}"
     docker compose -p "${dockerComposeProjectGroup}" -f "${composePath}" up -d
     `;
 

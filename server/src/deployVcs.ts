@@ -6,7 +6,7 @@ import { checkDockerVersion, checkGitVersion, checkTarVersion, getDockerInstallC
 import { sudoExec, basicExec, spawnProcess } from "../exec";
 import { getCustomLogger } from "../logger";
 import { getPaths, validatorDockerComposePath, getLocalLighthousePath, getLighhouseDownloadUrl, validatorDockerComposeGroup, getChainConfigPath, isOverrideCheckFiles, getChainConfigGitUrl, getLighhouseSha256Checksum, getChainConfigGitSha256Checksum, getChainConfigDir } from "../constant";
-import { calculateHash, isFileExists, isFileValid, writeProgramConfig } from "../fs";
+import { calculateHash, isFileValid, writeProgramConfig } from "../fs";
 
 export default function deployVcsAction(socket: import("socket.io").Socket) {
   return async (keyFileContent: Record<string, string>, 

@@ -16,7 +16,8 @@ export function sudoExec(
       const cmds = cmd.trim().split("\n");
       for(const cmdLine of cmds) {
         const tokens = cmdLine.trim().split(/[\s\t]+/);
-
+        console.log(tokens);
+        
         if(tokens.length > 0 && tokens[0]) {
           await new Promise(async (resolve2, reject2) => {
             try {
