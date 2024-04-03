@@ -39,7 +39,7 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
 ) {
   const deployVcLogger = getCustomLogger("deployValidators", socket);
   const filePaths = getPaths();
-
+  
   try {
     deployVcLogger.emitWithLog("Check Softwares");
 
@@ -141,6 +141,7 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
       await fs.writeFile(path.join(tempKeyPath, fileName), content);
     }
 
+    await fs.mkdir(filePaths.VC_KEYS_PATH, { recursive: true });
     // replacement of `make env`
     const envContent = `## BOOTNODE Configuration\n` +
       `NETWORK_ID=8899\n` +
@@ -222,7 +223,7 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
           "-o",
           "lighthouse.tar.gz",
         ], {
-          cwd: process.env.LIGHTHOUSE_EXEC_PATH,
+          cwd: filePaths.LIGHTHOUSE_EXEC_PATH,
         }),
       );
   
@@ -305,7 +306,7 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
           resolve(importResult);
         } else {
           const tokens = out.split('\n').filter((str) => !!str);
-          const err = new Error(tokens[tokens.length - 1] || `Exit code:${code}`);
+          const err = new Error(tokens[tokens.length - 1] || `Exit code: ${ code || signal}`);
           reject(err);
         }
       })
@@ -321,7 +322,6 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
       imported: importedResult.imported,
       skipped: importedResult.skipped
     });
-
     
     // fix deploy issue when use docker
     // change path inside validator_definitions.yml
@@ -339,13 +339,13 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
     const vcKeysCopyTargetPath = path.join(vcKeyMountPath, "custom");
     const dockerComposeProjectGroup = validatorDockerComposeGroup();
 
-    await sudoExec(`docker compose -p "${dockerComposeProjectGroup}" -f "${validatorDockerComposePath()}" down
+    await sudoExec(`docker compose -p ${dockerComposeProjectGroup} -f ${validatorDockerComposePath()} down
       docker container rm -f jbc-validator
-      cp -rf "${path.join(filePaths.VC_DEPLOY_TEMP, "config")}" "${filePaths.VC_KEYS_PATH}"
-      rm -rf "${vcKeysCopyTargetPath}"
-      mkdir -p "${vcKeysCopyTargetPath}"
-      cp -rf ${vcKeyExportPath}/* "${vcKeysCopyTargetPath}"
-      docker compose -p "${dockerComposeProjectGroup}" -f "${validatorDockerComposePath()}" up -d
+      cp -rf ${path.join(filePaths.VC_DEPLOY_TEMP, "config")} ${filePaths.VC_KEYS_PATH}
+      rm -rf ${vcKeysCopyTargetPath}
+      mkdir -p ${vcKeysCopyTargetPath}
+      cp -rf ${vcKeyExportPath}/* ${vcKeysCopyTargetPath}
+      docker compose -p ${dockerComposeProjectGroup} -f ${validatorDockerComposePath()} up -d
     `, deployVcLogger.injectExecTerminalLogs);
 
     // Write Config
@@ -353,7 +353,7 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
 
     // Rewrite Lighthouse API Key to rightful format
     const apiKeyPath = path.join(vcKeyMountPath, "custom/validators/api-token.txt");
-    const apiOut = await sudoExec(`cat "${apiKeyPath}"`, deployVcLogger.injectExecTerminalLogs);
+    const apiOut = await sudoExec(`cat ${apiKeyPath}`, deployVcLogger.injectExecTerminalLogs);
 
     importedResult.apiToken = apiOut.stdout;
     importedResult.apiPort = lighhouseApiPort;

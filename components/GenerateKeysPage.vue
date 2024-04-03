@@ -2,13 +2,13 @@
   <div class="h-screen flex flex-col">
     <div class="w-full flex flex-row flex-wrap px-2 py-1 bg-white shadow-md border-b border-gray-200">
       <LightButton :disabled="mainBusy" @click="toHome">Back</LightButton>
-      <LightButton v-if="generateResult" class="ml-auto" @click="generateResult = undefined">Generate Again
+      <LightButton v-if="keyGenerated" class="ml-auto" @click="keyGenerated = false">Generate Again
       </LightButton>
     </div>
     <div class="flex-1 overflow-y-auto">
       <div class="px-4 py-4 flex flex-col gap-y-2 items-center">
         <div>
-          <img src="~/assets/jbc-badge.png" class="mx-auto h-20" />
+          <img src="../assets/jbc-badge.png" class="mx-auto h-20" />
         </div>
         <h1 class="text-center font-bold text-2xl">
           JIB Validator Monitor
@@ -26,16 +26,17 @@
         </template>
 
         <template v-if="!mainBusy">
-          <div v-if="!generateResult" class="max-w-md w-full flex flex-col justify-center items-center gap-y-1">
+          <form v-if="!keyGenerated" class="max-w-md w-full flex flex-col justify-center items-center gap-y-1"
+            @submit.prevent="generateKey">
             <div class="w-full">
               <label for="node-count" class="block mb-2 text-sm font-bold text-gray-900 dark:text-white">
-                Number of Nodes:
+                Number of Nodes
               </label>
               <LightInput type="number" id="node-count" v-model.number="nodeCount" min="1" step="1" placeholder="1"
                 required :disabled="mainBusy" />
             </div>
             <div class="w-full">
-              <label for="withdraw-address" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+              <label for="withdraw-address" class="block mb-2 text-sm font-bold text-gray-900 dark:text-white">
                 Withdraw Address
               </label>
               <LightInput type="text" id="withdraw-address" v-model="withdrawAddress"
@@ -47,7 +48,7 @@
               </LightInput>
             </div>
             <div class="w-full">
-              <label for="password-address" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+              <label for="password-address" class="block mb-2 text-sm font-bold text-gray-900 dark:text-white">
                 Key Password
               </label>
               <LightInput :type="showPassword ? 'text' : 'password'" id="password-address" v-model="keyPassword"
@@ -59,7 +60,7 @@
               </LightInput>
             </div>
             <div class="w-full">
-              <label for="password-address" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+              <label for="password-address" class="block mb-2 text-sm font-bold text-gray-900 dark:text-white">
                 Confrim Key Password
               </label>
               <LightInput :type="showPassword ? 'text' : 'password'" id="password-address" v-model="confirmKeyPassword"
@@ -70,12 +71,20 @@
                 </template>
               </LightInput>
             </div>
+            <div v-if="false" class="w-full self-start">
+              <input id="advance-setting" type="checkbox" v-model="useCloud"
+                class="transition duration-200 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
+              <label for="advance-setting" class="ms-2 text-sm font-bold text-gray-900 dark:text-gray-300">
+                Use Cloud
+              </label>
+            </div>
             <div>
-              <LightButton class="mx-auto" :disabled="mainBusy || !isFormValid" @click="generateKey">Generate
+              <LightButton type="submit" class="mx-auto" :disabled="mainBusy || !isFormValid">
+                Generate
               </LightButton>
             </div>
-          </div>
-          <div v-else class="max-w-md w-full flex flex-col justify-center items-center gap-y-1">
+          </form>
+          <div v-else-if="generateResult" class="max-w-md w-full flex flex-col justify-center items-center gap-y-1">
             <h4 class="block mb-2 text-sm font-bold text-gray-900 dark:text-white">
               Mnemonic:
             </h4>
@@ -116,20 +125,31 @@
               </div>
             </div>
           </div>
+          <div v-else class="max-w-md w-full flex flex-col justify-center items-center gap-y-1">
+            <h3 class="text-center">Zip File Generated</h3>
+            <div class="text-center mb-2">
+              <a :href="zipURI" download="jbc-deposit-keystore.zip">
+                <LightButton>Download Zip</LightButton>
+              </a>
+            </div>
+          </div>
         </template>
       </div>
     </div>
   </div>
 </template>
 
+
 <script setup lang="ts">
-import LoadingContainer from "~/components/LoadingContainer.vue"
-import LightInput from "~/components/LightInput.vue"
-import LightButton from "~/components/LightButton.vue"
-import PasswordToggler from "~/components/PasswordToggler.vue"
-import Checkmark from "~/components/Checkmark.vue"
+import LoadingContainer from "./LoadingContainer.vue"
+import LightInput from "./LightInput.vue"
+import LightButton from "./LightButton.vue"
+import PasswordToggler from "./PasswordToggler.vue"
+import Checkmark from "./Checkmark.vue"
 import { MapPinIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/solid'
 
+import { ref, onMounted, computed } from 'vue';
+import Axios from "axios";
 import { isAddress } from "ethers"
 import JSZip from 'jszip'
 
@@ -141,6 +161,7 @@ let socket: import('socket.io-client').Socket | undefined;
 
 const mainBusy = ref(false);
 const loadingMessage = ref("Check Dependencies...");
+const keyGenerated = ref(false);
 const generateResult: Ref<GenerateKeyResponse | undefined> = ref(undefined);
 const fileDownloaded = ref(new Set<string>());
 const lastestError = ref("");
@@ -153,6 +174,7 @@ const withdrawAddress = ref("");
 const keyPassword = ref("");
 const confirmKeyPassword = ref("");
 const showPassword = ref(false);
+const useCloud = ref(true);
 
 const getWithdrawAddressError = computed(() => {
   if (!isAddress(withdrawAddress.value)) {
@@ -194,9 +216,56 @@ function generateKey() {
   }
 
   mainBusy.value = true;
-  generateResult.value = undefined;
   lastestError.value = "";
+  keyGenerated.value = false;
+  12345678
+  if (useCloud.value) {
+    cloudGenerateKey();
+  } else {
+    localGenerateKey();
+  }
+}
 
+async function cloudGenerateKey() {
+  try {
+    loadingMessage.value = "Cloud Generate Keys";
+    const res = await Axios.post("https://jbc-keygen.chan1sook.com/generate-keys", {
+      withdrawAddress: withdrawAddress.value,
+      keyPassword: keyPassword.value,
+      qty: nodeCount.value,
+    }, {
+      responseType: 'blob',
+      onDownloadProgress(progress) {
+        loadingMessage.value = `Downloading: (${progress.bytes} bytes)`;
+      }
+    })
+
+    if (zipURI.value) {
+      URL.revokeObjectURL(zipURI.value);
+    }
+    zipURI.value = URL.createObjectURL(res.data);
+
+    console.log("Zip Builded");
+
+    keyGenerated.value = true;
+    zipBusy.value = false;
+    mainBusy.value = false;
+  } catch (err) {
+    console.error(err);
+
+    if (err instanceof Error) {
+      lastestError.value = err.message;
+    } else {
+      lastestError.value = "Can't Generate File"
+    }
+
+    mainBusy.value = false;
+  }
+}
+
+function localGenerateKey() {
+  generateResult.value = undefined;
+  loadingMessage.value = "Check Dependencies...";
   socket?.emit("generateKeys", nodeCount.value, withdrawAddress.value.trim(), keyPassword.value);
 }
 
@@ -273,6 +342,8 @@ onMounted(() => {
       generateFileURIs(response?.contents);
       buildZipFile(response);
       generateResult.value = response;
+
+      keyGenerated.value = true;
     }
     mainBusy.value = false;
   })

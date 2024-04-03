@@ -5,6 +5,7 @@ import deployVcsAction from "../src/deployVcs";
 import loadLighthouseApiDataAction from "../src/loadLighthouseApiData";
 import exitVcAction from "../src/exitVc";
 import deploySirenAction from "../src/deploySiren";
+import getPublicIpAction from "../src/getPublicip";
 
 export default defineNitroPlugin(async (nitroApp) => {
   const { public: { sioPort } } = useRuntimeConfig();
@@ -23,6 +24,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     console.log("[SocketIO] connected", socket.id);
 
     socket.on("getPaths", getPathsAction(socket));
+    socket.on("getPublicIp", getPublicIpAction(socket));
     socket.on("generateKeys", generateKeysAction(socket));
     socket.on("deployValidators", deployVcsAction(socket));
     socket.on("loadLighthouseApiData", loadLighthouseApiDataAction(socket));

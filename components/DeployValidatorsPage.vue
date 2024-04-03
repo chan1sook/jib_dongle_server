@@ -69,9 +69,11 @@
                   <LightInput type="text" id="machine-public-ip" v-model="machinePublicIp"
                     :validation="getMachinePublicIpError" placeholder="eg xxx.xxx.xxx.xxx" required
                     :disabled="mainBusy">
-                    <template #lead="{ validation }">
-                      <MapPinIcon class="w-4 h-4 text-gray-500 dark:text-gray-400"
-                        :class="[validation ? 'text-red-900' : '']" aria-hidden="true" />
+                    <template #tail="{ validation }">
+                      <div class="inline-block cursor-pointer" title="Autofill Public IP"
+                        @click="loadPublicIp">
+                        <GlobeAltIcon class="w-4 h-4 text-gray-500 dark:text-gray-400" ></GlobeAltIcon>
+                      </div>
                     </template>
                   </LightInput>
                 </div>
@@ -82,7 +84,6 @@
                   </label>
                   <LightInput type="text" id="fee-recipient-address" v-model="feeRecipientAddress"
                     :validation="getFeeRecipientAddressError" placeholder="ETH Address" required :disabled="mainBusy">
-
                     <template #lead="{ validation }">
                       <MapPinIcon class="w-4 h-4 text-gray-500 dark:text-gray-400"
                         :class="[validation ? 'text-red-900' : '']" />
@@ -189,7 +190,7 @@ import LoadingContainer from "~/components/LoadingContainer.vue"
 import LightButton from "~/components/LightButton.vue"
 import LightInput from "~/components/LightInput.vue"
 import PasswordToggler from "~/components/PasswordToggler.vue"
-import { XMarkIcon, MapPinIcon, ClipboardDocumentListIcon } from '@heroicons/vue/24/solid'
+import { XMarkIcon, MapPinIcon, ClipboardDocumentListIcon, GlobeAltIcon} from '@heroicons/vue/24/solid'
 
 import { isAddress } from "ethers";
 import validator from 'validator';
@@ -239,8 +240,7 @@ const getKeyFilesError = computed(() => {
   if (keystoreKeys.length === 0) {
     return "Missing Keystore JSON File";
   }
-  // TODO read content it
-
+  
   return "";
 });
 
@@ -305,6 +305,10 @@ const isFormValid = computed(() => {
     && getLighthouseApiPortError.value === "";
 })
 
+function loadPublicIp() {
+  socket?.emit("getPublicIp");
+}
+
 let fileDom: HTMLInputElement;
 
 function selectVcKeyFiles() {
@@ -341,11 +345,11 @@ function deployValidators() {
   mainBusy.value = true;
 
   socket?.emit("deployValidators",
-    JSON.stringify(files.value),
+    files.value,
     machinePublicIp.value.trim(),
     feeRecipientAddress.value.trim(),
     keyPassword.value,
-    JSON.stringify(advanceSetting.value),
+    advanceSetting.value,
   );
 }
 
@@ -364,6 +368,12 @@ function toHome() {
 
 onMounted(() => {
   socket = useSocketIO(window.location);
+
+  socket.on("getPublicIpResponse", (resError: string | null, ip?: string) => {
+    if(typeof ip === "string") {
+      machinePublicIp.value = ip;
+    }
+  })
 
   socket.on("deployValidatorsStatus", (log: string) => {
     loadingMessage.value = log;

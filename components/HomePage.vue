@@ -25,7 +25,7 @@
           </HomeButton>
         </div>
         <div class="my-2 flex flex-row justify-center flex-wrap gap-4">
-          <HomeButton @click="jbcSirenMonitor">
+          <HomeButton v-if="false" @click="jbcSirenMonitor">
             <TvIcon class="w-8 h-8" />
             <div class="text-sm text-center">JBC Siren Monitor</div>
           </HomeButton>
