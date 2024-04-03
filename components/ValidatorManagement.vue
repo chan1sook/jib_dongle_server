@@ -387,21 +387,24 @@ async function getValidators() {
   apiBusy.value = false;
 }
 
-
 async function _getValidatorsInfo() {
   if (!lighhouseApiData.value) {
     return undefined;
   }
 
-  const response = await fetch(`http://localhost:${lighhouseApiData.value.apiPort}/lighthouse/validators`, {
-    method: "GET",
-    headers: {
-      "Authorization": `Bearer ${lighhouseApiData.value.apiToken}`
-    }
-  });
+  // const response = await fetch(`http://${window.location.hostname}:${}/lighthouse/validators`, {
+  //   method: "GET",
+  //   headers: {
+  //     "Authorization": `Bearer ${}`
+  //   }
+  // });
 
-  const { data } = await response.json() as { data: ValidatorData[] };
-  return data;
+  const { data } = await useFetch("/api/validators", { query: {
+    apiPort: lighhouseApiData.value.apiPort,
+    apiToken: lighhouseApiData.value.apiToken,
+  }})
+
+  return data.value;
 }
 
 function setSortValidator(v: { index?: number, sorted?: boolean, asc?: boolean }) {
@@ -440,7 +443,7 @@ async function setValidatorRun(validator: ValidatorData, state: boolean) {
   waitChangeValidator.value.add(validator.voting_pubkey);
 
   try {
-    await fetch(`http://localhost:${lighhouseApiData.value.apiPort}/lighthouse/validators/${validator.voting_pubkey}`, {
+    await fetch(`http://${window.location.hostname}:${lighhouseApiData.value.apiPort}/lighthouse/validators/${validator.voting_pubkey}`, {
       method: "PATCH",
       headers: {
         "Authorization": `Bearer ${lighhouseApiData.value.apiToken}`,

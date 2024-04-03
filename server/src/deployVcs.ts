@@ -344,7 +344,7 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
       cp -rf ${path.join(filePaths.VC_DEPLOY_TEMP, "config")} ${filePaths.VC_KEYS_PATH}
       rm -rf ${vcKeysCopyTargetPath}
       mkdir -p ${vcKeysCopyTargetPath}
-      cp -rf ${vcKeyExportPath}/* ${vcKeysCopyTargetPath}
+      cp -rf ${vcKeyExportPath}/validators ${vcKeysCopyTargetPath}
       docker compose -p ${dockerComposeProjectGroup} -f ${validatorDockerComposePath()} up -d
     `, deployVcLogger.injectExecTerminalLogs);
 
@@ -353,6 +353,9 @@ async function deployValidators(socket: import("socket.io").Socket, keyFileConte
 
     // Rewrite Lighthouse API Key to rightful format
     const apiKeyPath = path.join(vcKeyMountPath, "custom/validators/api-token.txt");
+    
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     const apiOut = await sudoExec(`cat ${apiKeyPath}`, deployVcLogger.injectExecTerminalLogs);
 
     importedResult.apiToken = apiOut.stdout;
