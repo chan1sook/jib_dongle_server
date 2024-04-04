@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col">
+  <div class="h-full flex flex-col">
     <div class="w-full flex flex-row flex-wrap px-2 py-1 bg-white shadow-md border-b border-gray-200">
       <div>
         <LightButton v-if="inputPage === 1 || deployResult" :disabled="mainBusy" @click="toHome">Back</LightButton>
@@ -70,9 +70,8 @@
                     :validation="getMachinePublicIpError" placeholder="eg xxx.xxx.xxx.xxx" required
                     :disabled="mainBusy">
                     <template #tail="{ validation }">
-                      <div class="inline-block cursor-pointer" title="Autofill Public IP"
-                        @click="loadPublicIp">
-                        <GlobeAltIcon class="w-4 h-4 text-gray-500 dark:text-gray-400" ></GlobeAltIcon>
+                      <div class="inline-block cursor-pointer" title="Autofill Public IP" @click="loadPublicIp">
+                        <GlobeAltIcon class="w-4 h-4 text-gray-500 dark:text-gray-400"></GlobeAltIcon>
                       </div>
                     </template>
                   </LightInput>
@@ -190,7 +189,7 @@ import LoadingContainer from "~/components/LoadingContainer.vue"
 import LightButton from "~/components/LightButton.vue"
 import LightInput from "~/components/LightInput.vue"
 import PasswordToggler from "~/components/PasswordToggler.vue"
-import { XMarkIcon, MapPinIcon, ClipboardDocumentListIcon, GlobeAltIcon} from '@heroicons/vue/24/solid'
+import { XMarkIcon, MapPinIcon, ClipboardDocumentListIcon, GlobeAltIcon } from '@heroicons/vue/24/solid'
 
 import { isAddress } from "ethers";
 import validator from 'validator';
@@ -240,7 +239,7 @@ const getKeyFilesError = computed(() => {
   if (keystoreKeys.length === 0) {
     return "Missing Keystore JSON File";
   }
-  
+
   return "";
 });
 
@@ -370,7 +369,7 @@ onMounted(() => {
   socket = useSocketIO(window.location);
 
   socket.on("getPublicIpResponse", (resError: string | null, ip?: string) => {
-    if(typeof ip === "string") {
+    if (typeof ip === "string") {
       machinePublicIp.value = ip;
     }
   })

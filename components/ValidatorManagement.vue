@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col">
+  <div class="h-full flex flex-col">
     <div class="w-full flex flex-row flex-wrap px-2 py-1 bg-white shadow-md border-b border-gray-200">
       <LightButton :disabled="mainBusy" @click="toHome">Back</LightButton>
       <LightButton v-if="!mainBusy" class="ml-auto" :disabled="mainBusy" @click="loadLighthouseApiData">
@@ -392,17 +392,12 @@ async function _getValidatorsInfo() {
     return undefined;
   }
 
-  // const response = await fetch(`http://${window.location.hostname}:${}/lighthouse/validators`, {
-  //   method: "GET",
-  //   headers: {
-  //     "Authorization": `Bearer ${}`
-  //   }
-  // });
-
-  const { data } = await useFetch("/api/validators", { query: {
-    apiPort: lighhouseApiData.value.apiPort,
-    apiToken: lighhouseApiData.value.apiToken,
-  }})
+  const { data } = await useFetch("/api/validators", {
+    query: {
+      apiPort: lighhouseApiData.value.apiPort,
+      apiToken: lighhouseApiData.value.apiToken,
+    }
+  })
 
   return data.value;
 }
@@ -443,16 +438,16 @@ async function setValidatorRun(validator: ValidatorData, state: boolean) {
   waitChangeValidator.value.add(validator.voting_pubkey);
 
   try {
-    await fetch(`http://${window.location.hostname}:${lighhouseApiData.value.apiPort}/lighthouse/validators/${validator.voting_pubkey}`, {
-      method: "PATCH",
-      headers: {
-        "Authorization": `Bearer ${lighhouseApiData.value.apiToken}`,
-        "Content-Type": "application/json"
+    await useFetch("/api/update", {
+      query: {
+        voting_pubkey: validator.voting_pubkey,
+        apiPort: lighhouseApiData.value.apiPort,
+        apiToken: lighhouseApiData.value.apiToken,
+        state: `${state}`
       },
-      body: JSON.stringify({
-        enabled: state
-      })
-    });
+      method: "POST"
+    })
+
     validator.enabled = state;
   } catch (err) {
     console.error(err);
