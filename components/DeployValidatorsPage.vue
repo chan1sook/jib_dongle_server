@@ -317,10 +317,10 @@ function selectVcKeyFiles() {
     fileDom.multiple = true;
     fileDom.accept = ".json";
     fileDom.addEventListener("input", async (ev) => {
-      if (ev.target instanceof HTMLInputElement && ev.target.files) {
+      if (fileDom instanceof HTMLInputElement && fileDom.files) {
         const response: Record<string, string> = {};
-        for (let i = 0; i < ev.target.files.length; i++) {
-          response[ev.target.files[i].name] = await ev.target.files[i].text();
+        for (let i = 0; i < fileDom.files.length; i++) {
+          response[fileDom.files[i].name] = await fileDom.files[i].text();
         }
 
         files.value = Object.assign({ ...files.value }, response);
